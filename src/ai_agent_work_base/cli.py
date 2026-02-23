@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 from ai_agent_work_base.core.llm import LLMClient
 from ai_agent_work_base.engine.loader import WorkflowLoader
 from ai_agent_work_base.engine.executor import GraphExecutor
+from ai_agent_work_base.engine.trigger_runner import TriggerRunner
+from ai_agent_work_base.engine.slack_trigger import SlackTriggerApp
 from ai_agent_work_base.skills import load_all_skills
 from ai_agent_work_base.schemas.workflow import NodeDefinition, WorkflowDefinition
 
@@ -21,6 +23,7 @@ load_dotenv()
 
 console = Console()
 WORKFLOW_DIR = Path("workflows")
+TRIGGER_DIR = Path("triggers")
 
 def get_available_workflows() -> List[Dict[str, Any]]:
     """workflowsディレクトリ内のYAMLファイルを取得"""
@@ -149,12 +152,113 @@ def run_workflow() -> None:
         sys.exit(1)
 
 
+def list_triggers() -> None:
+    """登録済みトリガーの一覧をテーブル形式で表示する"""
+    runner = TriggerRunner(
+        triggers_dir=TRIGGER_DIR,
+        workflows_dir=WORKFLOW_DIR,
+        llm_client=None,
+        skills=[],
+    )
+    triggers = runner.load_triggers()
+    if not triggers:
+        console.print("[yellow]triggers/ディレクトリにトリガーが定義されていません。[/yellow]")
+        return
+
+    table = Table(title="Registered Triggers")
+    table.add_column("Name", style="cyan")
+    table.add_column("Workflow", style="magenta")
+    table.add_column("Trigger Type", style="green")
+    table.add_column("Schedule/Config", style="yellow")
+    table.add_column("Enabled", style="white")
+
+    for t in triggers:
+        ttype = t.trigger.get("type", "unknown")
+        config = t.trigger.get("schedule") or t.trigger.get("keyword") or t.trigger.get("path") or "-"
+        table.add_row(t.name, t.workflow, ttype, config, "✅" if t.enabled else "❌")
+
+    console.print(table)
+
+
+def run_trigger_once(trigger_name: str) -> None:
+    """指定トリガーを即時1回実行する"""
+    llm_client = LLMClient()
+    skills = load_all_skills()
+
+    runner = TriggerRunner(
+        triggers_dir=TRIGGER_DIR,
+        workflows_dir=WORKFLOW_DIR,
+        llm_client=llm_client,
+        skills=skills,
+        on_workflow_start=lambda tn, wn: console.print(f"▶️  トリガー実行: [bold cyan]{tn}[/bold cyan] → ワークフロー: {wn}"),
+        on_workflow_end=lambda tn, wn, r: console.print(f"✅ [bold green]{tn}[/bold green] 完了"),
+    )
+    try:
+        runner.run_once(trigger_name)
+    except (ValueError, FileNotFoundError) as e:
+        console.print(f"[bold red]エラー:[/bold red] {e}")
+        sys.exit(1)
+
+
+def start_slack_trigger() -> None:
+    """Slack BoltアプリをSocket Modeで起動する"""
+    llm_client = LLMClient()
+    skills = load_all_skills()
+
+    app = SlackTriggerApp(
+        workflows_dir=WORKFLOW_DIR,
+        llm_client=llm_client,
+        skills=skills,
+    )
+    console.print("[bold green]Slack Triggerアプリ起動中... Ctrl+C で停止[/bold green]")
+    console.print("Slackで [cyan]/run <workflow>[/cyan] または [cyan]/workflows[/cyan] と入力してください。")
+    try:
+        app.start()
+    except RuntimeError as e:
+        console.print(f"[bold red]エラー:[/bold red] {e}")
+        sys.exit(1)
+
+
+def start_scheduler() -> None:
+    """cronトリガーをバックグラウンドで起動し続ける"""
+    import time
+    llm_client = LLMClient()
+    skills = load_all_skills()
+
+    runner = TriggerRunner(
+        triggers_dir=TRIGGER_DIR,
+        workflows_dir=WORKFLOW_DIR,
+        llm_client=llm_client,
+        skills=skills,
+        on_workflow_start=lambda tn, wn: console.print(f"▶️  [{tn}] {wn} 開始"),
+        on_workflow_end=lambda tn, wn, r: console.print(f"✅ [{tn}] {wn} 完了"),
+    )
+    scheduler = runner.start_cron()
+    if scheduler is None:
+        return
+    console.print("[bold green]スケジューラー起動中... Ctrl+C で停止[/bold green]")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        scheduler.shutdown()
+        console.print("[yellow]スケジューラーを停止しました。[/yellow]")
+
+
 def main():
     parser = argparse.ArgumentParser(description="AI Agent Platform CLI")
     subparsers = parser.add_subparsers(dest="command")
 
     subparsers.add_parser("skills", help="登録済みスキルの一覧を表示する")
     subparsers.add_parser("run", help="ワークフローを選択して実行する")
+
+    trigger_parser = subparsers.add_parser("trigger", help="トリガー管理")
+    trigger_sub = trigger_parser.add_subparsers(dest="trigger_command")
+    trigger_sub.add_parser("list", help="登録済みトリガーの一覧を表示する")
+    run_once_parser = trigger_sub.add_parser("run-once", help="指定トリガーを即時1回実行する")
+    run_once_parser.add_argument("name", help="実行するトリガー名")
+    trigger_sub.add_parser("start", help="cronスケジューラーを起動する")
+    trigger_sub.add_parser("slack", help="Slack BoltアプリをSocket Modeで起動する")
 
     args = parser.parse_args()
 
@@ -163,6 +267,17 @@ def main():
 
     if args.command == "skills":
         list_skills()
+    elif args.command == "trigger":
+        if args.trigger_command == "list":
+            list_triggers()
+        elif args.trigger_command == "run-once":
+            run_trigger_once(args.name)
+        elif args.trigger_command == "start":
+            start_scheduler()
+        elif args.trigger_command == "slack":
+            start_slack_trigger()
+        else:
+            trigger_parser.print_help()
     elif args.command == "run" or args.command is None:
         run_workflow()
     else:

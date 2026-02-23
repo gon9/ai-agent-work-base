@@ -1,0 +1,46 @@
+name: "Daily News"
+description: "毎朝のニュースを収集・要約してスマホにpush通知するワークフロー"
+inputs:
+  - name: "topic"
+    type: "string"
+    description: "収集するニュースのトピック（デフォルト: 今日のテクノロジーニュース）"
+  - name: "num_items"
+    type: "integer"
+    description: "収集するニュース件数（デフォルト: 5）"
+
+nodes:
+  # Step 1: 今日のニュースを収集する
+  - id: "fetch_news"
+    type: "skill"
+    skill: "web_search"
+    params:
+      query: "{{inputs.topic}} 最新ニュース 今日"
+    next: "summarize"
+
+  # Step 2: ニュースを要約する
+  - id: "summarize"
+    type: "llm"
+    model: "gpt-4o-mini"
+    prompt: |
+      以下のニュース検索結果から、今日の重要なトピックを{{inputs.num_items}}件以内に
+      簡潔にまとめてください。各項目は2〜3行で要約し、箇条書きで出力してください。
+
+      ## 検索結果
+      {{fetch_news.output}}
+
+      ## 出力形式
+      - **[タイトル]**: [2〜3行の要約]
+      （最大{{inputs.num_items}}件）
+    next: "notify_push"
+
+  # Step 3: スマホにpush通知する
+  - id: "notify_push"
+    type: "skill"
+    skill: "push_notify"
+    params:
+      title: "📰 今日のニュース: {{inputs.topic}}"
+      message: "{{summarize.output}}"
+    next: "end"
+
+  - id: "end"
+    type: "end"

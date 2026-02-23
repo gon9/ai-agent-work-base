@@ -1,0 +1,9 @@
+name: "Morning News"
+workflow: "daily_news"
+trigger:
+  type: "cron"
+  schedule: "0 7 * * *"  # 毎朝7時
+inputs:
+  topic: "テクノロジー・AI"
+  num_items: "5"
+enabled: true

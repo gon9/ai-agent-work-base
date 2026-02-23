@@ -8,6 +8,8 @@ from .presentation import SlideGenerationSkill
 from .pptx_generation import PptxGenerationSkill
 from .pptxjs_generation import PptxJsGenerationSkill
 from .slack import SlackNotifySkill
+from .push_notify import PushNotifySkill
+from .email_send import EmailSendSkill
 from .self_debug import SelfDebugSkill
 
 def load_all_skills() -> List[BaseSkill]:
@@ -23,5 +25,7 @@ def load_all_skills() -> List[BaseSkill]:
         PptxGenerationSkill(),
         PptxJsGenerationSkill(),
         SlackNotifySkill(),
+        PushNotifySkill(),
+        EmailSendSkill(),
         SelfDebugSkill(),
     ]
