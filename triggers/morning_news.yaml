@@ -2,7 +2,10 @@ name: "Morning News"
 workflow: "daily_news"
 trigger:
   type: "cron"
-  schedule: "0 7 * * *"  # 毎朝7時
+  # スケジュールはあくまで定義。実行には以下のいずれかが必要:
+  #   手動実行: uv run python -m ai_agent_work_base trigger run-once "Morning News"
+  #   常駐実行: uv run python -m ai_agent_work_base trigger start  (プロセスが生きている間のみ有効)
+  schedule: "0 7 * * *"
 inputs:
   topic: "テクノロジー・AI"
   num_items: "5"
