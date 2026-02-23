@@ -1,0 +1,65 @@
+name: "問い合わせ自動対応"
+description: "問い合わせ内容を受け取り、要約・返答を生成してSlackに通知します"
+inputs:
+  - name: "inquiry"
+    type: "string"
+    description: "問い合わせ本文"
+  - name: "sender"
+    type: "string"
+    description: "問い合わせ者の名前またはメールアドレス"
+  - name: "channel"
+    type: "string"
+    description: "通知先Slackチャンネル（省略時はデフォルト）"
+
+nodes:
+  # Step 1: 問い合わせを要約する
+  - id: "summarize_inquiry"
+    type: "llm"
+    model: "gpt-4o-mini"
+    prompt: |
+      以下の問い合わせ内容を3行以内で簡潔に要約してください。
+      要点（何を求めているか）が明確になるようにまとめてください。
+
+      ## 問い合わせ者
+      {{inputs.sender}}
+
+      ## 問い合わせ内容
+      {{inputs.inquiry}}
+    next: "generate_response"
+
+  # Step 2: 返答案を生成する
+  - id: "generate_response"
+    type: "llm"
+    model: "gpt-4o"
+    prompt: |
+      以下の問い合わせに対して、丁寧かつ的確な返答文を日本語で作成してください。
+
+      ## 問い合わせ要約
+      {{summarize_inquiry.output}}
+
+      ## 元の問い合わせ内容
+      {{inputs.inquiry}}
+
+      ## 要件
+      - 敬語を使い、プロフェッショナルなトーンで
+      - 問い合わせの要点に正確に答える
+      - 必要に応じて次のアクションを明示する
+      - 200〜400文字程度
+    next: "notify_slack"
+
+  # Step 3: Slackに通知する
+  - id: "notify_slack"
+    type: "skill"
+    skill: "slack_notify"
+    params:
+      title: "📩 新しい問い合わせ対応レポート"
+      message: |
+        *送信者:* {{inputs.sender}}
+
+        *【要約】*
+        {{summarize_inquiry.output}}
+
+        *【返答案】*
+        {{generate_response.output}}
+      channel: "{{inputs.channel}}"
+    next: "end"

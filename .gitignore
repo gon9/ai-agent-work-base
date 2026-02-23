@@ -8,3 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
+
+.env
+
+.chainlit/*
+output/*
+!output/.gitkeep
+node_modules/
+src/ai_agent_work_base/skills/pptxjs_env/*.pptx

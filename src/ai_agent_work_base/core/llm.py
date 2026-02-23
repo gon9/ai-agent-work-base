@@ -28,7 +28,9 @@ class LLMClient:
         self, 
         messages: List[Dict[str, str]], 
         tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[Any] = None
+        tool_choice: Optional[Any] = None,
+        model: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None
     ) -> Any:
         """
         Chat Completion APIを呼び出す
@@ -37,12 +39,14 @@ class LLMClient:
             messages (List[Dict[str, str]]): メッセージ履歴
             tools (List[Dict[str, Any]], optional): Function Calling用のツール定義
             tool_choice (Any, optional): ツールの選択設定
+            model (str, optional): 使用するモデル名（指定がない場合はデフォルトモデルを使用）
+            response_format (Dict, optional): 出力フォーマット指定（例: {"type": "json_object"}）
             
         Returns:
             Any: APIレスポンス (ChatCompletion)
         """
         params = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": messages,
         }
         
@@ -50,5 +54,7 @@ class LLMClient:
             params["tools"] = tools
         if tool_choice:
             params["tool_choice"] = tool_choice
+        if response_format:
+            params["response_format"] = response_format
             
         return self.client.chat.completions.create(**params)

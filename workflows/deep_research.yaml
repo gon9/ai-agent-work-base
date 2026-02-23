@@ -1,0 +1,78 @@
+name: "Deep Research"
+description: "多角的な視点で深掘り調査を行い、構造化されたレポートを作成します"
+inputs:
+  - name: "topic"
+    type: "string"
+    description: "調査するトピック"
+  - name: "num_queries"
+    type: "integer"
+    description: "調査する視点の数（デフォルト: 3）"
+
+nodes:
+  # Step 1: 調査計画 — 多角的な視点でクエリを設計する
+  - id: "plan_research"
+    type: "llm"
+    model: "gpt-4o-mini"
+    output_format: "json"
+    prompt: |
+      あなたはプロのリサーチャーです。
+      トピック「{{inputs.topic}}」について、異なる視点から深く調査するための検索クエリを{{inputs.num_queries}}個考えてください。
+
+      各クエリは以下の観点を意識して設計してください:
+      - 基礎・概念的な理解
+      - 実践的な応用・ユースケース
+      - 最新動向・課題・将来展望
+      - 比較・ベストプラクティス
+
+      以下のJSON形式のみで出力してください（他のテキストは不要）:
+      {"queries": ["クエリ1", "クエリ2", ..., "クエリN"]}
+    next: "execute_searches"
+
+  # Step 2: 各クエリで検索（foreachで逐次実行）
+  - id: "execute_searches"
+    type: "foreach"
+    items: "{{plan_research.output.queries}}"
+    node:
+      type: "skill"
+      skill: "web_search"
+      params:
+        query: "{{item}}"
+    next: "analyze_each"
+
+  # Step 3: 各検索結果を個別に分析・要約する
+  - id: "analyze_each"
+    type: "foreach"
+    items: "{{execute_searches.output}}"
+    node:
+      type: "llm"
+      model: "gpt-4o-mini"
+      prompt: |
+        以下の検索結果から、トピック「{{inputs.topic}}」に関する重要な知見を抽出・要約してください。
+
+        ## 検索結果
+        {{item}}
+
+        ## 出力形式
+        - 主要な発見事項を箇条書きで3〜5点
+        - 信頼できる情報源のURLを明記
+        - 不明点・追加調査が必要な点があれば記載
+    next: "synthesize"
+
+  # Step 4: 全分析結果を統合して深掘りレポートを作成
+  - id: "synthesize"
+    type: "llm"
+    model: "gpt-4o"
+    prompt: |
+      あなたはプロのリサーチャーです。
+      以下の複数の調査・分析結果を統合して、トピック「{{inputs.topic}}」についての深掘りレポートを日本語で作成してください。
+
+      ## 各視点からの分析結果
+      {{analyze_each.output}}
+
+      ## レポート要件
+      - 複数の視点を統合した総合的な考察を行うこと
+      - 重要な発見事項を優先度順に整理すること
+      - 実践的な示唆・推奨事項を含めること
+      - 情報源を適切に引用すること
+      - 構造化されたMarkdown形式で出力すること（見出し・箇条書きを活用）
+    next: "end"
